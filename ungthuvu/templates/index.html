@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chẩn đoán Khối U Vú - Random Forest</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-indigo-50 to-white text-gray-800">
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="max-w-5xl mx-auto px-4 py-6">
+      <h1 class="text-3xl font-bold text-indigo-700 flex items-center gap-2">
+        🩺 Chẩn đoán Khối U Vú
+      </h1>
+      <p class="text-gray-500 mt-1 text-sm md:text-base">
+        Nhập các chỉ số xét nghiệm để mô hình Random Forest dự đoán <b>Ác tính</b> hoặc <b>Lành tính</b>.
+      </p>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-5xl mx-auto px-4 py-10">
+    <div class="grid md:grid-cols-2 gap-8">
+      <!-- Form -->
+      <form id="predict-form" class="bg-white rounded-2xl shadow-lg p-6 space-y-6">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-semibold text-gray-800">🔬 Thông tin xét nghiệm</h2>
+          <button id="reset-btn" type="button"
+            class="text-sm text-indigo-600 hover:text-indigo-800 underline transition">Xoá nhanh</button>
+        </div>
+
+        <div class="grid gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1" for="concave_points_mean">Concave Points Mean</label>
+            <input id="concave_points_mean" name="concave points_mean" type="number" step="any" required
+              class="w-full rounded-xl border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="VD: 0.05" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1" for="concave_points_worst">Concave Points Worst</label>
+            <input id="concave_points_worst" name="concave points_worst" type="number" step="any" required
+              class="w-full rounded-xl border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="VD: 0.20" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1" for="area_worst">Area Worst</label>
+            <input id="area_worst" name="area_worst" type="number" step="any" required
+              class="w-full rounded-xl border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="VD: 1200" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1" for="concavity_mean">Concavity Mean</label>
+            <input id="concavity_mean" name="concavity_mean" type="number" step="any" required
+              class="w-full rounded-xl border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="VD: 0.10" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1" for="radius_worst">Radius Worst</label>
+            <input id="radius_worst" name="radius_worst" type="number" step="any" required
+              class="w-full rounded-xl border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="VD: 25" />
+          </div>
+        </div>
+
+        <button id="submit-btn" type="submit"
+          class="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-3 font-medium shadow-md hover:bg-indigo-700 transition disabled:opacity-50">
+          <span>🧠 Dự đoán</span>
+          <span id="loading" class="hidden animate-pulse">· · ·</span>
+        </button>
+      </form>
+
+      <!-- Kết quả -->
+      <section class="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+        <h2 class="text-xl font-semibold text-gray-800">📊 Kết quả</h2>
+        <div id="result" class="hidden">
+          <div id="badge" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"></div>
+
+          <div class="mt-4">
+            <p class="text-sm font-medium text-gray-700">Xác suất dự đoán:</p>
+            <ul class="mt-2 text-sm list-disc list-inside text-gray-600">
+              <li><span class="font-medium">Ác tính (0):</span> <span id="proba_m"></span></li>
+              <li><span class="font-medium">Lành tính (1):</span> <span id="proba_b"></span></li>
+            </ul>
+          </div>
+
+          <div class="mt-4">
+            <canvas id="probabilityChart" class="w-full h-56"></canvas>
+          </div>
+
+          <details class="mt-4 text-sm text-gray-600">
+            <summary class="cursor-pointer font-medium">📦 Dữ liệu gửi</summary>
+            <pre id="payload" class="mt-2 bg-gray-100 rounded-xl p-3 text-xs overflow-auto"></pre>
+          </details>
+        </div>
+
+        <div id="empty" class="text-sm text-gray-500">⚠️ Chưa có dự đoán. Hãy nhập số liệu và bấm <b>Dự đoán</b>.</div>
+        <div id="error" class="hidden text-sm text-red-600 bg-red-50 p-3 rounded-xl"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="max-w-5xl mx-auto px-4 pb-8 text-xs text-gray-400 text-center">
+    <p>Ứng dụng demo chẩn đoán ung thư vú với RandomForest. Backend Flask/FastAPI sử dụng endpoint <code>/predict</code>.</p>
+  </footer>
+
+  <!-- Script giữ nguyên -->
+  <script>
+   const form = document.getElementById('predict-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const loading = document.getElementById('loading');
+    const resultBox = document.getElementById('result');
+    const emptyBox = document.getElementById('empty');
+    const errorBox = document.getElementById('error');
+    const badge = document.getElementById('badge');
+    const probaM = document.getElementById('proba_m');
+    const probaB = document.getElementById('proba_b');
+    const payloadPre = document.getElementById('payload');
+    const resetBtn = document.getElementById('reset-btn');
+
+    let probabilityChart = null;
+
+    resetBtn.addEventListener('click', () => {
+      form.reset();
+      resultBox.classList.add('hidden');
+      errorBox.classList.add('hidden');
+      emptyBox.classList.remove('hidden');
+      if (probabilityChart) {
+        probabilityChart.destroy();
+        probabilityChart = null;
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.classList.add('hidden');
+
+      // Tạo payload với đúng key như lúc huấn luyện
+      const fd = new FormData(form);
+      const payload = {
+        "concave points_mean": parseFloat(fd.get('concave points_mean')),
+        "concave points_worst": parseFloat(fd.get('concave points_worst')),
+        "area_worst": parseFloat(fd.get('area_worst')),
+        "concavity_mean": parseFloat(fd.get('concavity_mean')),
+        "radius_worst": parseFloat(fd.get('radius_worst'))
+      };
+
+      // Kiểm tra hợp lệ đơn giản
+      for (const [k, v] of Object.entries(payload)) {
+        if (Number.isNaN(v)) {
+          errorBox.textContent = `Trường "${k}" không hợp lệ. Vui lòng nhập số hợp lệ.`;
+          errorBox.classList.remove('hidden');
+          return;
+        }
+      }
+
+      // Loading UI
+      submitBtn.disabled = true;
+      loading.classList.remove('hidden');
+
+      try {
+        // Gọi API backend
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        // Kỳ vọng: { prediction: 0|1, proba: [p_m, p_b] }
+        const pred = data.prediction;
+        const pM = Array.isArray(data.proba) ? data.proba[0] : undefined;
+        const pB = Array.isArray(data.proba) ? data.proba[1] : undefined;
+
+        // Hiển thị
+        emptyBox.classList.add('hidden');
+        resultBox.classList.remove('hidden');
+        payloadPre.textContent = JSON.stringify(payload, null, 2);
+
+        probaM.textContent = pM !== undefined ? `${(pM * 100).toFixed(2)}%` : '—';
+        probaB.textContent = pB !== undefined ? `${(pB * 100).toFixed(2)}%` : '—';
+
+        if (pred === 0) {
+          badge.textContent = '❌ Dự đoán: ÁC TÍNH (0)';
+          badge.className = 'inline-flex items-center gap-2 rounded-2xl px-3 py-1 text-sm font-semibold bg-red-100 text-red-700';
+        } else if (pred === 1) {
+          badge.textContent = '✅ Dự đoán: LÀNH TÍNH (1)';
+          badge.className = 'inline-flex items-center gap-2 rounded-2xl px-3 py-1 text-sm font-semibold bg-green-100 text-green-700';
+        } else {
+          badge.textContent = 'Kết quả không xác định';
+          badge.className = 'inline-flex items-center gap-2 rounded-2xl px-3 py-1 text-sm font-semibold bg-gray-100 text-gray-700';
+        }
+
+        // Vẽ biểu đồ xác suất
+        if (pM !== undefined && pB !== undefined) {
+          if (probabilityChart) {
+            probabilityChart.destroy();
+          }
+          const ctx = document.getElementById('probabilityChart').getContext('2d');
+          probabilityChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: ['Ác tính', 'Lành tính'],
+              datasets: [{
+                label: 'Xác suất',
+                data: [pM * 100, pB * 100],
+                backgroundColor: ['#f87171', '#4ade80'],
+                borderColor: ['#ef4444', '#22c55e'],
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  max: 100,
+                  title: {
+                    display: true,
+                    text: 'Tỷ lệ (%)'
+                  }
+                }
+              },
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    label: (context) => `${context.parsed.y.toFixed(2)}%`
+                  }
+                }
+              }
+            }
+          });
+        }
+      } catch (err) {
+        errorBox.textContent = `Không gọi được API /predict. Chi tiết: ${err.message}`;
+        errorBox.classList.remove('hidden');
+        resultBox.classList.add('hidden');
+        emptyBox.classList.add('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        loading.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
